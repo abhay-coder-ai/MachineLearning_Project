@@ -1,19 +1,16 @@
 import sys
-from dataclasses import dataclass
 import os
-
 import numpy as np
 import pandas as pd
+from dataclasses import dataclass
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 from src.exception import CustomException
 from src.logger import logging
 from src.utils import save_object
-
-from src.components.data_ingestion import DataIngestion
 
 @dataclass
 class DataTransformationConfig:
@@ -21,42 +18,31 @@ class DataTransformationConfig:
 
 class DataTransformation:
     def __init__(self):
-        self.data_transformation_config = DataTransformationConfig()
+        self.config = DataTransformationConfig()
 
     def get_data_transformer_object(self):
-        """
-        This function is responsible for creating the preprocessing object
-        """
         try:
-            # Define columns
             numerical_columns = ['reading score', 'writing score']
             categorical_columns = [
-                'gender', 'race/ethnicity', 'parental level of education', 
+                'gender', 'race/ethnicity',
+                'parental level of education',
                 'lunch', 'test preparation course'
             ]
 
-            # Numerical pipeline
             num_pipeline = Pipeline([
                 ('imputer', SimpleImputer(strategy='median')),
                 ('scaler', StandardScaler())
             ])
 
-            # Categorical pipeline
             cat_pipeline = Pipeline([
                 ('imputer', SimpleImputer(strategy='most_frequent')),
                 ('onehot', OneHotEncoder(drop='first', handle_unknown='ignore'))
             ])
 
-            logging.info(f'Numerical columns: {numerical_columns}')
-            logging.info(f'Categorical columns: {categorical_columns}')
-
-            # Combine pipelines
-            preprocessor = ColumnTransformer([
-                ('numerical_pipeline', num_pipeline, numerical_columns),
-                ('categorical_pipeline', cat_pipeline, categorical_columns)
+            return ColumnTransformer([
+                ('num', num_pipeline, numerical_columns),
+                ('cat', cat_pipeline, categorical_columns)
             ])
-
-            return preprocessor
 
         except Exception as e:
             raise CustomException(e, sys)
@@ -66,64 +52,25 @@ class DataTransformation:
             train_df = pd.read_csv(train_path)
             test_df = pd.read_csv(test_path)
 
-            logging.info('Read train and test data completed')
-            logging.info('Obtaining preprocessing object')
+            target_col = 'math score'
+            preprocessor = self.get_data_transformer_object()
 
-            preprocessing_obj = self.get_data_transformer_object()
+            X_train = train_df.drop(columns=[target_col])
+            y_train = train_df[target_col]
 
-            target_column_name = 'math score'
-            numerical_columns = ['reading score', 'writing score']
+            X_test = test_df.drop(columns=[target_col])
+            y_test = test_df[target_col]
 
-            input_feature_train_df = train_df.drop(columns=[target_column_name], axis=1)
-            target_feature_train_df = train_df[target_column_name]
+            X_train_arr = preprocessor.fit_transform(X_train)
+            X_test_arr = preprocessor.transform(X_test)
 
-            input_feature_test_df = test_df.drop(columns=[target_column_name], axis=1)
-            target_feature_test_df = test_df[target_column_name]
+            train_arr = np.c_[X_train_arr, y_train.to_numpy()]
+            test_arr = np.c_[X_test_arr, y_test.to_numpy()]
 
-            logging.info('Applying preprocessing object on training and testing dataframe')
+            os.makedirs('artifacts', exist_ok=True)
+            save_object(self.config.preprocessor_obj_file_path, preprocessor)
 
-            # Fit on train, transform on both
-            input_feature_train_arr = preprocessing_obj.fit_transform(input_feature_train_df)
-            input_feature_test_arr = preprocessing_obj.transform(input_feature_test_df)
-
-            # Concatenate features with target
-            train_arr = np.c_[input_feature_train_arr, np.array(target_feature_train_df)]
-            test_arr = np.c_[input_feature_test_arr, np.array(target_feature_test_df)]
-
-            # Ensure artifacts folder exists
-            os.makedirs(os.path.dirname(self.data_transformation_config.preprocessor_obj_file_path), exist_ok=True)
-
-            logging.info('Saving preprocessing object.')
-
-            save_object(
-                file_path=self.data_transformation_config.preprocessor_obj_file_path,
-                obj=preprocessing_obj
-            )
-
-            return (
-                train_arr,
-                test_arr,
-                self.data_transformation_config.preprocessor_obj_file_path
-            )
+            return train_arr, test_arr, self.config.preprocessor_obj_file_path
 
         except Exception as e:
             raise CustomException(e, sys)
-
-
-if __name__ == '__main__':
-    try:
-        # Run data ingestion
-        data_ingestion = DataIngestion()
-        train_data_path, test_data_path = data_ingestion.initiate_data_ingestion()
-
-        # Run data transformation
-        data_transformation = DataTransformation()
-        train_arr, test_arr, preprocessor_path = data_transformation.initiate_data_transformation(
-            train_data_path,
-            test_data_path
-        )
-
-        logging.info(f'Data Transformation Completed. Preprocessor saved at {preprocessor_path}')
-
-    except Exception as e:
-        logging.error(f'Error in running Data Transformation: {e}')
