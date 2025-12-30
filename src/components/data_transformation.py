@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
+
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
@@ -12,9 +13,11 @@ from src.exception import CustomException
 from src.logger import logging
 from src.utils import save_object
 
+
 @dataclass
 class DataTransformationConfig:
-    preprocessor_obj_file_path: str = os.path.join('artifacts', 'preprocessor.pkl')
+    preprocessor_obj_file_path: str = os.path.join("artifacts", "preprocessor.pkl")
+
 
 class DataTransformation:
     def __init__(self):
@@ -22,27 +25,38 @@ class DataTransformation:
 
     def get_data_transformer_object(self):
         try:
-            numerical_columns = ['reading score', 'writing score']
+            numerical_columns = ["reading score", "writing score"]
             categorical_columns = [
-                'gender', 'race/ethnicity',
-                'parental level of education',
-                'lunch', 'test preparation course'
+                "gender",
+                "race/ethnicity",
+                "parental level of education",
+                "lunch",
+                "test preparation course",
             ]
 
-            num_pipeline = Pipeline([
-                ('imputer', SimpleImputer(strategy='median')),
-                ('scaler', StandardScaler())
-            ])
+            # ✅ FIX: add_indicator=True (CRITICAL)
+            num_pipeline = Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median", add_indicator=True)),
+                    ("scaler", StandardScaler()),
+                ]
+            )
 
-            cat_pipeline = Pipeline([
-                ('imputer', SimpleImputer(strategy='most_frequent')),
-                ('onehot', OneHotEncoder(drop='first', handle_unknown='ignore'))
-            ])
+            cat_pipeline = Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="most_frequent", add_indicator=True)),
+                    ("onehot", OneHotEncoder(drop="first", handle_unknown="ignore")),
+                ]
+            )
 
-            return ColumnTransformer([
-                ('num', num_pipeline, numerical_columns),
-                ('cat', cat_pipeline, categorical_columns)
-            ])
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ("num", num_pipeline, numerical_columns),
+                    ("cat", cat_pipeline, categorical_columns),
+                ]
+            )
+
+            return preprocessor
 
         except Exception as e:
             raise CustomException(e, sys)
@@ -52,8 +66,7 @@ class DataTransformation:
             train_df = pd.read_csv(train_path)
             test_df = pd.read_csv(test_path)
 
-            target_col = 'math score'
-            preprocessor = self.get_data_transformer_object()
+            target_col = "math score"
 
             X_train = train_df.drop(columns=[target_col])
             y_train = train_df[target_col]
@@ -61,14 +74,23 @@ class DataTransformation:
             X_test = test_df.drop(columns=[target_col])
             y_test = test_df[target_col]
 
+            preprocessor = self.get_data_transformer_object()
+
             X_train_arr = preprocessor.fit_transform(X_train)
             X_test_arr = preprocessor.transform(X_test)
 
             train_arr = np.c_[X_train_arr, y_train.to_numpy()]
             test_arr = np.c_[X_test_arr, y_test.to_numpy()]
 
-            os.makedirs('artifacts', exist_ok=True)
-            save_object(self.config.preprocessor_obj_file_path, preprocessor)
+            os.makedirs("artifacts", exist_ok=True)
+
+            # ✅ Save updated preprocessor
+            save_object(
+                file_path=self.config.preprocessor_obj_file_path,
+                obj=preprocessor,
+            )
+
+            logging.info("Data transformation completed and preprocessor saved")
 
             return train_arr, test_arr, self.config.preprocessor_obj_file_path
 
