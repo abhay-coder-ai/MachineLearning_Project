@@ -91,10 +91,3 @@ Docker was used to:
 
 This reflects **industry-standard ML deployment practices**.
 
-
-## Deployment
-This application is deployed on Render using Docker with Python 3.10.
-
-Live URL:
-https://machinelearning-project-j8rk.onrender.com
-
