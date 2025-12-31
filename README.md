@@ -1,5 +1,3 @@
-## End to End Machine Learning Project
-
 # 🎓 Math Score Predictor – End-to-End Machine Learning Project
 
 This project is a complete **end-to-end Machine Learning application** that predicts a student’s **math score** based on demographic and academic-related features.  
